@@ -1,12 +1,12 @@
 package com.techforb.app.modules.quotes.application.dto;
 
 import com.techforb.app.modules.quotes.domain.Coverage;
-import com.techforb.app.modules.quotes.domain.CoveragePremium;
+import com.techforb.app.modules.quotes.domain.CoverageType;
 import java.math.BigDecimal;
 
-public record CoverageResponse(Coverage coverage, BigDecimal monthlyPremium) {
+public record CoverageResponse(CoverageType type, String name, BigDecimal monthlyPremium) {
 
-    public static CoverageResponse from(CoveragePremium premium) {
-        return new CoverageResponse(premium.coverage(), premium.monthlyPremium());
+    public static CoverageResponse from(Coverage coverage) {
+        return new CoverageResponse(coverage.type(), coverage.type().getLabel(), coverage.monthlyPremium());
     }
 }
