@@ -1,7 +1,6 @@
 package com.techforb.app.modules.policyholders.api;
 
 import com.techforb.app.modules.policyholders.application.PolicyholderService;
-import com.techforb.app.modules.policyholders.application.dto.PolicyholderDetailResponse;
 import com.techforb.app.modules.policyholders.application.dto.PolicyholderRequest;
 import com.techforb.app.modules.policyholders.application.dto.PolicyholderResponse;
 import com.techforb.app.modules.policyholders.application.dto.VehicleRequest;
@@ -24,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/policyholders")
-@Tag(name = "Asegurados y vehículos")
+@Tag(name = "Asegurados")
 public class PolicyholderController {
 
     private final PolicyholderService service;
@@ -34,7 +33,7 @@ public class PolicyholderController {
     }
 
     @GetMapping
-    @Operation(summary = "Busca asegurados y devuelve una lista paginada")
+    @Operation(summary = "Buscar asegurados por nombre o documento")
     public PageResponse<PolicyholderResponse> listPolicyholders(
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
@@ -43,43 +42,42 @@ public class PolicyholderController {
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Consulta la ficha de un asegurado")
-    public PolicyholderDetailResponse getPolicyholder(@PathVariable String id) {
+    @Operation(summary = "Consultar ficha del asegurado")
+    public PolicyholderResponse getPolicyholder(@PathVariable String id) {
         return service.getPolicyholder(id);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Da de alta un asegurado")
-    public PolicyholderDetailResponse createPolicyholder(@Valid @RequestBody PolicyholderRequest request) {
+    @Operation(summary = "Dar de alta un asegurado")
+    public PolicyholderResponse createPolicyholder(@Valid @RequestBody PolicyholderRequest request) {
         return service.createPolicyholder(request);
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "Edita un asegurado")
-    public PolicyholderDetailResponse updatePolicyholder(
-            @PathVariable String id, @Valid @RequestBody PolicyholderRequest request) {
+    @Operation(summary = "Actualizar un asegurado")
+    public PolicyholderResponse updatePolicyholder(@PathVariable String id, @Valid @RequestBody PolicyholderRequest request) {
         return service.updatePolicyholder(id, request);
-    }
-
-    @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Da de baja un asegurado sin pólizas vigentes")
-    public void deactivatePolicyholder(@PathVariable String id) {
-        service.deactivatePolicyholder(id);
     }
 
     @PostMapping("/{id}/vehicles")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Agrega un vehículo al asegurado")
-    public VehicleResponse createVehicle(@PathVariable String id, @Valid @RequestBody VehicleRequest request) {
-        return service.createVehicle(id, request);
+    @Operation(summary = "Agregar un vehículo al asegurado")
+    public VehicleResponse addVehicle(@PathVariable String id, @Valid @RequestBody VehicleRequest request) {
+        return service.addVehicle(id, request);
     }
 
     @PutMapping("/{id}/vehicles/{vehicleId}")
-    @Operation(summary = "Edita un vehículo del asegurado")
+    @Operation(summary = "Actualizar un vehículo del asegurado")
     public VehicleResponse updateVehicle(@PathVariable String id, @PathVariable String vehicleId,
             @Valid @RequestBody VehicleRequest request) {
         return service.updateVehicle(id, vehicleId, request);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Dar de baja un asegurado sin pólizas vigentes")
+    public void deactivatePolicyholder(@PathVariable String id) {
+        service.deactivatePolicyholder(id);
     }
 }

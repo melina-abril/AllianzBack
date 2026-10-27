@@ -2,21 +2,23 @@ package com.techforb.app.modules.quotes.application;
 
 import com.techforb.app.modules.quotes.application.dto.QuoteRequest;
 import com.techforb.app.modules.quotes.application.dto.QuoteResponse;
-import com.techforb.app.modules.quotes.application.dto.VehicleCatalogResponse;
+import com.techforb.app.modules.quotes.application.dto.VehicleResponse;
 import com.techforb.app.modules.quotes.domain.Quote;
-import com.techforb.app.modules.quotes.domain.QuoteDetails;
+import com.techforb.app.modules.quotes.domain.QuoteInput;
 import com.techforb.app.modules.quotes.domain.QuoteRepository;
-import com.techforb.app.modules.quotes.domain.VehicleOption;
+import com.techforb.app.modules.quotes.domain.Vehicle;
 import com.techforb.app.shared.error.BusinessRuleException;
 import com.techforb.app.shared.error.NotFoundException;
+import com.techforb.app.shared.web.PageResponse;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
+import java.time.Period;
+import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
-/** Casos de uso y validaciones que dependen del catálogo o de la vigencia. */
 @Service
 public class QuoteService {
 
@@ -28,45 +30,46 @@ public class QuoteService {
         this.clock = clock;
     }
 
-    public VehicleCatalogResponse getVehicleCatalog() {
-        return VehicleCatalogResponse.from(repository.findAllVehicles());
+    public PageResponse<VehicleResponse> listQuotableVehicles(
+            String brand, String model, String version, Integer year, int page, int size) {
+        List<Vehicle> vehicles = repository.findAllVehicles().stream()
+                .filter(vehicle -> matches(vehicle.brand(), brand))
+                .filter(vehicle -> matches(vehicle.model(), model))
+                .filter(vehicle -> matches(vehicle.version(), version))
+                .filter(vehicle -> year == null || vehicle.year() == year)
+                .filter(vehicle -> vehicle.year() <= LocalDate.now(clock).getYear())
+                .toList();
+        return PageResponse.of(vehicles, page, size, VehicleResponse::from);
     }
 
     public QuoteResponse createQuote(QuoteRequest request) {
-        VehicleOption vehicle = validateVehicle(request);
-        Quote quote = Quote.create(UUID.randomUUID().toString(), details(request), vehicle,
-                Instant.now(clock), LocalDate.now(clock).plusDays(15));
-        // Respuesta dummy respaldada por datos en memoria; reemplazar al conectar la persistencia real.
+        QuoteInput input = validateAndBuild(request);
+        Instant now = Instant.now(clock);
+        LocalDate today = LocalDate.now(clock);
+        String number = "COT-" + UUID.randomUUID().toString().toUpperCase(Locale.ROOT);
+        Quote quote = new Quote(number, input, now, today.plusDays(15), today);
+        // Respuesta dummy respaldada por datos en memoria; reemplazar al conectar el almacenamiento real.
         return QuoteResponse.from(repository.save(quote));
     }
 
-    public QuoteResponse updateQuote(String number, QuoteRequest request) {
-        Quote quote = find(number);
+    public QuoteResponse updateQuote(String id, QuoteRequest request) {
+        Quote quote = findMatching(id, request.dni());
         assertCurrent(quote);
-        if (!quote.getDetails().dni().equals(request.dni())) {
-            throw new NotFoundException("No encontramos una cotización con esos datos");
-        }
-        VehicleOption vehicle = validateVehicle(request);
-        quote.update(details(request), vehicle);
+        QuoteInput input = validateAndBuild(request);
+        // Se calcula completamente antes de modificar lo guardado; ante un error permanece la versión anterior.
+        quote.recalculate(input, Instant.now(clock), LocalDate.now(clock));
         return QuoteResponse.from(repository.save(quote));
     }
 
-    public QuoteResponse recoverQuote(String number, String dni) {
-        if (number == null || number.isBlank()) {
-            throw new BusinessRuleException("QUOTE_NUMBER_REQUIRED", "Ingresá el número de cotización.");
-        }
-        if (dni == null || !dni.matches("[0-9]{7,8}")) {
-            throw new BusinessRuleException("INVALID_DNI", "Ingresá un DNI de siete u ocho dígitos.");
-        }
-        Quote quote = repository.findByNumber(number)
-                .filter(found -> found.getDetails().dni().equals(dni))
-                .orElseThrow(() -> new NotFoundException("No encontramos una cotización con esos datos"));
+    public QuoteResponse retrieveQuote(String id, String dni) {
+        Quote quote = findMatching(id, dni);
         assertCurrent(quote);
         return QuoteResponse.from(quote);
     }
 
-    private Quote find(String number) {
-        return repository.findByNumber(number)
+    private Quote findMatching(String id, String dni) {
+        return repository.findById(id)
+                .filter(quote -> quote.getInput().dni().equals(dni))
                 .orElseThrow(() -> new NotFoundException("No encontramos una cotización con esos datos"));
     }
 
@@ -76,24 +79,35 @@ public class QuoteService {
         }
     }
 
-    private VehicleOption validateVehicle(QuoteRequest request) {
+    private QuoteInput validateAndBuild(QuoteRequest request) {
         LocalDate today = LocalDate.now(clock);
         if (request.year() > today.getYear()) {
             throw new BusinessRuleException("INVALID_VEHICLE_YEAR", "El año del vehículo no puede ser posterior al actual.");
         }
-        if (!request.birthDate().isBefore(today)) {
+        if (request.birthDate() == null || !request.birthDate().isBefore(today)) {
             throw new BusinessRuleException("INVALID_BIRTH_DATE", "La fecha de nacimiento debe ser anterior a hoy.");
         }
-        if (request.licenseYears() > ChronoUnit.YEARS.between(request.birthDate(), today)) {
-            throw new BusinessRuleException("INVALID_LICENSE_YEARS", "Los años de registro no pueden superar los años transcurridos desde el nacimiento.");
+        if (request.registrationYears() == null || request.registrationYears() < 0
+                || request.claimsLastThreeYears() == null || request.claimsLastThreeYears() < 0) {
+            throw new BusinessRuleException("INVALID_DRIVER_DATA", "Revisá los datos indicados para cotizar");
         }
-        return repository.findVehicle(request.brand(), request.model(), request.version(), request.year())
-                .orElseThrow(() -> new BusinessRuleException("VEHICLE_NOT_AVAILABLE", "No hay vehículos disponibles para esta selección"));
+        if (request.registrationYears() > Period.between(request.birthDate(), today).getYears()) {
+            throw new BusinessRuleException("INVALID_REGISTRATION_YEARS", "Los años de registro no pueden superar la edad del conductor.");
+        }
+        Vehicle vehicle = repository.findAllVehicles().stream()
+                .filter(candidate -> candidate.brand().equalsIgnoreCase(request.brand().trim()))
+                .filter(candidate -> candidate.model().equalsIgnoreCase(request.model().trim()))
+                .filter(candidate -> candidate.version().equalsIgnoreCase(request.version().trim()))
+                .filter(candidate -> candidate.year() == request.year())
+                .findFirst()
+                .orElseThrow(() -> new BusinessRuleException("VEHICLE_NOT_AVAILABLE",
+                        "No hay vehículos disponibles para esta selección"));
+        return new QuoteInput(vehicle, request.use(), request.gnc(), request.postalCode(), request.birthDate(),
+                request.registrationYears(), request.claimsLastThreeYears(), request.paymentMethod(), request.dni());
     }
 
-    private QuoteDetails details(QuoteRequest request) {
-        return new QuoteDetails(request.brand(), request.model(), request.version(), request.year(),
-                request.use(), request.gnc(), request.postalCode(), request.birthDate(),
-                request.licenseYears(), request.claimsLastThreeYears(), request.paymentMethod(), request.dni());
+    private boolean matches(String value, String filter) {
+        return filter == null || filter.isBlank()
+                || value.toLowerCase(Locale.ROOT).contains(filter.trim().toLowerCase(Locale.ROOT));
     }
 }

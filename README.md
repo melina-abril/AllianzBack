@@ -1,32 +1,38 @@
 # Allianz — API de seguros de autos
 
-Backend REST de ejemplo con Java 21 y Spring Boot 4.1. Los datos se mantienen en memoria; se reinician al volver a levantar la aplicación. Las respuestas actuales son datos de ejemplo que se reemplazarán al conectar la persistencia.
+Backend REST con Java 21 y Spring Boot 4.1. Los datos se mantienen en memoria y las respuestas son de ejemplo; se pierden al reiniciar la aplicación.
 
 ## Iniciar
 
-Con Java 21 y Maven instalados, ejecuta `mvn spring-boot:run`. La API estará disponible en `http://localhost:8080/api` y la documentación interactiva en `http://localhost:8080/swagger-ui.html`. Para verificar la compilación, ejecuta `mvn compile`.
+Con Java 21 y Maven instalados, ejecuta:
+
+```sh
+mvn spring-boot:run
+```
+
+La API queda disponible en `http://localhost:8080/api` y la documentación interactiva en `http://localhost:8080/swagger-ui.html`.
 
 ## Módulos y endpoints
 
-### Cotizador de seguro de auto
+### Cotizador de seguro de auto (`quotes`)
 
-| Método | Ruta | Función |
+| Método | Endpoint | Descripción |
 | --- | --- | --- |
-| GET | `/api/quotes/catalog` | Consultar marcas, modelos, versiones y años disponibles. |
-| POST | `/api/quotes` | Crear una cotización con cuatro coberturas. |
-| PUT | `/api/quotes/{number}` | Actualizar y recalcular una cotización vigente. |
-| GET | `/api/quotes/{number}` | Recuperar una cotización por número y DNI. |
+| GET | `/api/quotes/vehicles` | Consulta las combinaciones de vehículos disponibles para cotizar. |
+| POST | `/api/quotes` | Crea una cotización con cuatro coberturas y vigencia de 15 días. |
+| PUT | `/api/quotes/{id}` | Recalcula una cotización vigente. |
+| GET | `/api/quotes/{id}` | Recupera una cotización vigente; requiere el DNI como parámetro de consulta. |
 
-### Asegurados y vehículos
+### Asegurados y vehículos (`policyholders`)
 
-| Método | Ruta | Función |
+| Método | Endpoint | Descripción |
 | --- | --- | --- |
-| GET | `/api/policyholders` | Buscar asegurados con paginación (`page` y `size`). |
-| GET | `/api/policyholders/{id}` | Consultar la ficha de un asegurado. |
-| POST | `/api/policyholders` | Dar de alta un asegurado. |
-| PUT | `/api/policyholders/{id}` | Editar un asegurado. |
-| DELETE | `/api/policyholders/{id}` | Dar de baja un asegurado sin pólizas vigentes. |
-| POST | `/api/policyholders/{id}/vehicles` | Agregar un vehículo. |
-| PUT | `/api/policyholders/{id}/vehicles/{vehicleId}` | Editar un vehículo. |
+| GET | `/api/policyholders` | Busca asegurados con paginación. |
+| GET | `/api/policyholders/{id}` | Consulta la ficha de un asegurado. |
+| POST | `/api/policyholders` | Da de alta un asegurado. |
+| PUT | `/api/policyholders/{id}` | Actualiza un asegurado. |
+| POST | `/api/policyholders/{id}/vehicles` | Asocia un vehículo. |
+| PUT | `/api/policyholders/{id}/vehicles/{vehicleId}` | Actualiza un vehículo asociado. |
+| DELETE | `/api/policyholders/{id}` | Da de baja un asegurado sin pólizas vigentes. |
 
-Los errores se devuelven como `ProblemDetail`, con un código estable y, cuando corresponde, errores por campo. Consulta Swagger para ver los esquemas de solicitudes y respuestas.
+Spring Boot detecta automáticamente los controladores de ambos módulos bajo `com.techforb.app.modules`; no hace falta registrar rutas adicionales. Los errores se devuelven como `ProblemDetail` y los listados paginados incluyen `items`, `page`, `size`, `totalItems` y `totalPages`.

@@ -1,15 +1,12 @@
 package com.techforb.app.modules.policyholders.infrastructure;
 
-import com.techforb.app.modules.policyholders.domain.ClaimRecord;
-import com.techforb.app.modules.policyholders.domain.ClaimStatus;
-import com.techforb.app.modules.policyholders.domain.DocumentType;
-import com.techforb.app.modules.policyholders.domain.PersonType;
-import com.techforb.app.modules.policyholders.domain.PolicyRecord;
-import com.techforb.app.modules.policyholders.domain.PolicyStatus;
 import com.techforb.app.modules.policyholders.domain.Policyholder;
+import com.techforb.app.modules.policyholders.domain.Policyholder.ClaimSummary;
+import com.techforb.app.modules.policyholders.domain.Policyholder.PersonType;
+import com.techforb.app.modules.policyholders.domain.Policyholder.PolicySummary;
+import com.techforb.app.modules.policyholders.domain.Policyholder.Status;
+import com.techforb.app.modules.policyholders.domain.Policyholder.Vehicle;
 import com.techforb.app.modules.policyholders.domain.PolicyholderRepository;
-import com.techforb.app.modules.policyholders.domain.Vehicle;
-import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -20,45 +17,41 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Repository;
 
-/** Datos DUMMY en memoria: sustituir por persistencia y registros de pólizas y siniestros reales. */
+/** Datos DUMMY en memoria: reemplazar por un repositorio persistente y asociaciones reales. */
 @Repository
 public class InMemoryPolicyholderRepository implements PolicyholderRepository {
 
     private final Map<String, Policyholder> policyholders = new ConcurrentHashMap<>();
 
-    public InMemoryPolicyholderRepository(Clock clock) {
-        LocalDate today = LocalDate.now(clock);
-        Instant now = Instant.now(clock);
-
-        Policyholder ana = new Policyholder("ph-1001", PersonType.NATURAL, "Ana Martínez", DocumentType.DNI,
-                "28456789", null, "ana.martinez@example.com", "11 4567-8901", "Av. Santa Fe 1234, CABA", now);
-        ana.addVehicle(new Vehicle("veh-1001", "AF123BC", "Toyota", "Corolla", 2022, "2ZRFAE82901", "9BRBD3HE5N1234567"), now);
-        ana.addVehicle(new Vehicle("veh-1002", "AB123CD", "Volkswagen", "Gol Trend", 2018, "CFZ912345", "9BWAB45U8JT012345"), now);
-        ana.addPolicy(new PolicyRecord("POL-1001", PolicyStatus.ACTIVE, "Terceros Completo con Granizo",
-                List.of("veh-1001"), today.minusMonths(2), today.plusMonths(10)));
-        ana.addPolicy(new PolicyRecord("POL-0901", PolicyStatus.EXPIRED, "Responsabilidad Civil",
-                List.of("veh-1002"), today.minusYears(2), today.minusYears(1)));
-        ana.addClaim(new ClaimRecord("SIN-1001", ClaimStatus.IN_REVIEW, "veh-1001",
-                "Daños por granizo", today.minusDays(20)));
-        save(ana);
-
-        Policyholder company = new Policyholder("ph-1002", PersonType.LEGAL, "Logística del Sur SA", DocumentType.CUIT,
-                "30712345678", "María Fernández", "flota@example.com", "11 4300-1122", "Av. Rivadavia 3456, CABA", now);
-        company.addVehicle(new Vehicle("veh-1003", "AE456FG", "Ford", "Ranger", 2023, "P5AT231045", "8AFAR22K0PJ123456"), now);
-        company.addPolicy(new PolicyRecord("POL-1002", PolicyStatus.ACTIVE, "Todo Riesgo con franquicia",
-                List.of("veh-1003"), today.minusMonths(1), today.plusMonths(11)));
-        save(company);
-
-        Policyholder pedro = new Policyholder("ph-1003", PersonType.NATURAL, "Pedro Gómez", DocumentType.DNI,
-                "32123456", null, null, "11 5555-2100", "Calle 9 487, La Plata", now);
-        pedro.addVehicle(new Vehicle("veh-1004", "AC789HI", "Fiat", "Cronos", 2020, "552730188", "8AP359A2NLU123456"), now);
-        pedro.addClaim(new ClaimRecord("SIN-0902", ClaimStatus.CLOSED, "veh-1004",
-                "Rotura de parabrisas", today.minusMonths(8)));
-        save(pedro);
-
-        Policyholder lucia = new Policyholder("ph-1004", PersonType.NATURAL, "Lucía Torres", DocumentType.DNI,
-                "35678901", null, "lucia.torres@example.com", null, "San Martín 210, Córdoba", now);
-        save(lucia);
+    public InMemoryPolicyholderRepository() {
+        save(new Policyholder("ph-1001", PersonType.INDIVIDUAL, "María González", "28456789",
+                null, "maria.gonzalez@example.com", "+54 11 4567-8901", "Av. Santa Fe 1450, CABA",
+                Status.ACTIVE, Instant.parse("2026-03-12T14:00:00Z"),
+                List.of(new Vehicle("veh-1001", "AE123BC", "Toyota", "Corolla", 2022, "MTR482901", "CHS1001829"),
+                        new Vehicle("veh-1002", "AB456CD", "Volkswagen", "Gol", 2017, "MTR392810", "CHS1002830")),
+                List.of(new PolicySummary("POL-1001", "ACTIVE", "Terceros completo", List.of("veh-1001"),
+                        LocalDate.parse("2026-01-01"), LocalDate.parse("2026-12-31")),
+                        new PolicySummary("POL-0901", "EXPIRED", "Responsabilidad civil", List.of("veh-1002"),
+                                LocalDate.parse("2024-01-01"), LocalDate.parse("2024-12-31"))),
+                List.of(new ClaimSummary("SIN-1001", "IN_REVIEW", "veh-1001", "AE123BC", "Daños por granizo",
+                        LocalDate.parse("2026-02-18")))));
+        save(new Policyholder("ph-1002", PersonType.LEGAL_ENTITY, "Transportes del Sur S. A.", "30712345678",
+                "Lucía Fernández", "administracion@example.com", "+54 11 4321-7788", "Av. Rivadavia 3200, CABA",
+                Status.ACTIVE, Instant.parse("2026-03-10T09:15:00Z"),
+                List.of(new Vehicle("veh-1003", "AG789EF", "Ford", "Ranger", 2023, "MTR883729", "CHS1003921")),
+                List.of(new PolicySummary("POL-1002", "ACTIVE", "Todo riesgo con franquicia", List.of("veh-1003"),
+                        LocalDate.parse("2026-02-01"), LocalDate.parse("2027-01-31"))), List.of()));
+        save(new Policyholder("ph-1003", PersonType.INDIVIDUAL, "Juan Pérez", "32123456",
+                null, null, "+54 351 555-0123", "San Martín 450, Córdoba",
+                Status.ACTIVE, Instant.parse("2026-02-20T11:30:00Z"), List.of(), List.of(), List.of()));
+        save(new Policyholder("ph-1004", PersonType.INDIVIDUAL, "Ana Martínez", "26111222",
+                null, "ana.martinez@example.com", null, "Mitre 870, Rosario",
+                Status.INACTIVE, Instant.parse("2026-01-15T17:00:00Z"),
+                List.of(new Vehicle("veh-1004", "AC987GH", "Chevrolet", "Onix", 2019, "MTR771100", "CHS1004110")),
+                List.of(new PolicySummary("POL-0802", "EXPIRED", "Responsabilidad civil", List.of("veh-1004"),
+                        LocalDate.parse("2024-04-01"), LocalDate.parse("2025-03-31"))),
+                List.of(new ClaimSummary("SIN-0802", "CLOSED", "veh-1004", "AC987GH", "Rotura de parabrisas",
+                        LocalDate.parse("2024-08-09")))));
     }
 
     @Override
@@ -71,18 +64,6 @@ public class InMemoryPolicyholderRepository implements PolicyholderRepository {
     @Override
     public Optional<Policyholder> findById(String id) {
         return Optional.ofNullable(policyholders.get(id));
-    }
-
-    @Override
-    public Optional<Policyholder> findByDocumentNumber(String documentNumber) {
-        return policyholders.values().stream()
-                .filter(holder -> holder.getDocumentNumber().equals(documentNumber)).findFirst();
-    }
-
-    @Override
-    public Optional<Vehicle> findByPlate(String plate) {
-        return policyholders.values().stream().flatMap(holder -> holder.getVehicles().stream())
-                .filter(vehicle -> vehicle.getPlate().equalsIgnoreCase(plate)).findFirst();
     }
 
     @Override

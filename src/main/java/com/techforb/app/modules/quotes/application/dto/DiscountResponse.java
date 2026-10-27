@@ -1,11 +1,11 @@
 package com.techforb.app.modules.quotes.application.dto;
 
-import com.techforb.app.modules.quotes.domain.QuoteDiscount;
+import com.techforb.app.modules.quotes.domain.DiscountType;
 import java.math.BigDecimal;
 
-public record DiscountResponse(String code, BigDecimal percentage) {
+public record DiscountResponse(DiscountType type, String name, BigDecimal rate) {
 
-    public static DiscountResponse from(QuoteDiscount discount) {
-        return new DiscountResponse(discount.code(), discount.percentage());
+    public static DiscountResponse from(DiscountType discount) {
+        return new DiscountResponse(discount, discount.getLabel(), discount.getRate());
     }
 }

@@ -1,22 +1,17 @@
 package com.techforb.app.modules.policyholders.application;
 
-import com.techforb.app.modules.policyholders.application.dto.PolicyholderDetailResponse;
 import com.techforb.app.modules.policyholders.application.dto.PolicyholderRequest;
 import com.techforb.app.modules.policyholders.application.dto.PolicyholderResponse;
 import com.techforb.app.modules.policyholders.application.dto.VehicleRequest;
 import com.techforb.app.modules.policyholders.application.dto.VehicleResponse;
-import com.techforb.app.modules.policyholders.domain.DocumentType;
-import com.techforb.app.modules.policyholders.domain.PersonType;
 import com.techforb.app.modules.policyholders.domain.Policyholder;
 import com.techforb.app.modules.policyholders.domain.PolicyholderRepository;
-import com.techforb.app.modules.policyholders.domain.Vehicle;
 import com.techforb.app.shared.error.BusinessRuleException;
 import com.techforb.app.shared.error.ConflictException;
 import com.techforb.app.shared.error.NotFoundException;
 import com.techforb.app.shared.web.PageResponse;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -34,82 +29,71 @@ public class PolicyholderService {
     }
 
     public PageResponse<PolicyholderResponse> listPolicyholders(String search, int page, int size) {
-        String term = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
-        String digits = normalizeDocument(term);
-        boolean documentSearch = !term.isEmpty() && term.matches("[0-9 .-]+") && !digits.isEmpty();
-        List<Policyholder> filtered = repository.findAll().stream()
+        String term = search == null ? "" : search.trim();
+        String document = normalizeDocument(term);
+        List<Policyholder> matches = repository.findAll().stream()
                 .filter(holder -> term.isEmpty()
-                        || (documentSearch ? holder.getDocumentNumber().equals(digits)
-                                : holder.getName().toLowerCase(Locale.ROOT).contains(term)))
+                        || holder.getName().toLowerCase(Locale.ROOT).contains(term.toLowerCase(Locale.ROOT))
+                        || (!document.isEmpty() && normalizeDocument(holder.getDocumentNumber()).equals(document)))
                 .toList();
-        // Respuesta DUMMY basada en registros en memoria; reemplazar al conectar la persistencia real.
-        return PageResponse.of(filtered, page, size, PolicyholderResponse::from);
+        // Datos de ejemplo en memoria: reemplazar por consultas reales al conectar la persistencia.
+        return PageResponse.of(matches, page, size, PolicyholderResponse::from);
     }
 
-    public PolicyholderDetailResponse getPolicyholder(String id) {
-        return detail(find(id));
+    public PolicyholderResponse getPolicyholder(String id) {
+        return PolicyholderResponse.from(find(id));
     }
 
-    public PolicyholderDetailResponse createPolicyholder(PolicyholderRequest request) {
-        String document = validatedDocument(request);
-        assertDocumentAvailable(document, null);
-        Policyholder holder = new Policyholder(UUID.randomUUID().toString(), request.personType(),
-                request.name().trim(), request.documentType(), document, request.primaryContact(),
-                request.email(), request.phone(), request.address(), Instant.now(clock));
-        return detail(repository.save(holder));
+    public PolicyholderResponse createPolicyholder(PolicyholderRequest request) {
+        validateDocument(request);
+        assertDocumentAvailable(request.documentNumber(), null);
+        Policyholder holder = new Policyholder(UUID.randomUUID().toString(), request.personType(), request.name().trim(),
+                normalizeDocument(request.documentNumber()), request.primaryContact(), request.email(), request.phone(),
+                request.address(), Policyholder.Status.ACTIVE, Instant.now(clock), List.of(), List.of(), List.of());
+        return PolicyholderResponse.from(repository.save(holder));
     }
 
-    public PolicyholderDetailResponse updatePolicyholder(String id, PolicyholderRequest request) {
+    public PolicyholderResponse updatePolicyholder(String id, PolicyholderRequest request) {
         Policyholder holder = find(id);
         assertActive(holder);
-        String document = validatedDocument(request);
-        assertDocumentAvailable(document, id);
-        holder.updateDetails(request.personType(), request.name().trim(), request.documentType(),
-                document, request.primaryContact(), request.email(), request.phone(), request.address(),
-                Instant.now(clock));
-        return detail(repository.save(holder));
+        validateDocument(request);
+        assertDocumentAvailable(request.documentNumber(), id);
+        holder.updateDetails(request.personType(), request.name().trim(), normalizeDocument(request.documentNumber()),
+                request.primaryContact(), request.email(), request.phone(), request.address(), Instant.now(clock));
+        return PolicyholderResponse.from(repository.save(holder));
     }
 
-    public void deactivatePolicyholder(String id) {
+    public VehicleResponse addVehicle(String id, VehicleRequest request) {
         Policyholder holder = find(id);
         assertActive(holder);
-        if (holder.activePolicyCount(LocalDate.now(clock)) > 0) {
-            throw new BusinessRuleException("POLICYHOLDER_HAS_ACTIVE_POLICIES",
-                    "No se puede dar de baja a un asegurado con pólizas vigentes.");
-        }
-        holder.deactivate(Instant.now(clock));
-        repository.save(holder);
-    }
-
-    public VehicleResponse createVehicle(String id, VehicleRequest request) {
-        Policyholder holder = find(id);
-        assertActive(holder);
-        String plate = validatedPlate(request.plate());
-        assertPlateAvailable(plate, null);
-        Vehicle vehicle = new Vehicle(UUID.randomUUID().toString(), plate, request.brand().trim(),
-                request.model().trim(), request.year(), request.engine().trim(), request.chassis().trim());
+        assertPlateAvailable(request.plate(), null);
+        Policyholder.Vehicle vehicle = toVehicle(UUID.randomUUID().toString(), request);
         holder.addVehicle(vehicle, Instant.now(clock));
         repository.save(holder);
-        return VehicleResponse.from(vehicle, holder.getPolicies(), LocalDate.now(clock));
+        return VehicleResponse.from(vehicle, holder.isCovered(vehicle.id()));
     }
 
     public VehicleResponse updateVehicle(String id, String vehicleId, VehicleRequest request) {
         Policyholder holder = find(id);
         assertActive(holder);
-        Vehicle vehicle = holder.getVehicles().stream().filter(item -> item.getId().equals(vehicleId))
-                .findFirst().orElseThrow(() -> new NotFoundException("No existe el vehículo " + vehicleId + " para este asegurado."));
-        String plate = validatedPlate(request.plate());
-        assertPlateAvailable(plate, vehicleId);
-        vehicle.update(plate, request.brand().trim(), request.model().trim(), request.year(),
-                request.engine().trim(), request.chassis().trim());
-        holder.touch(Instant.now(clock));
+        holder.getVehicles().stream().filter(vehicle -> vehicle.id().equals(vehicleId)).findFirst()
+                .orElseThrow(() -> new NotFoundException("No existe el vehículo indicado para este asegurado."));
+        assertPlateAvailable(request.plate(), vehicleId);
+        Policyholder.Vehicle vehicle = toVehicle(vehicleId, request);
+        holder.replaceVehicle(vehicle, Instant.now(clock));
         repository.save(holder);
-        return VehicleResponse.from(vehicle, holder.getPolicies(), LocalDate.now(clock));
+        return VehicleResponse.from(vehicle, holder.isCovered(vehicleId));
     }
 
-    private PolicyholderDetailResponse detail(Policyholder holder) {
-        // Respuesta DUMMY con pólizas y siniestros de ejemplo; reemplazar por registros reales.
-        return PolicyholderDetailResponse.from(holder, LocalDate.now(clock));
+    public void deactivatePolicyholder(String id) {
+        Policyholder holder = find(id);
+        assertActive(holder);
+        if (holder.activePolicyCount() > 0) {
+            throw new BusinessRuleException("POLICYHOLDER_HAS_ACTIVE_POLICIES",
+                    "No puedes dar de baja a un asegurado con pólizas vigentes.");
+        }
+        holder.deactivate(Instant.now(clock));
+        repository.save(holder);
     }
 
     private Policyholder find(String id) {
@@ -118,49 +102,51 @@ public class PolicyholderService {
     }
 
     private void assertActive(Policyholder holder) {
-        if (!holder.isActive()) {
-            throw new BusinessRuleException("POLICYHOLDER_INACTIVE", "El asegurado ya está dado de baja.");
+        if (holder.getStatus() == Policyholder.Status.INACTIVE) {
+            throw new BusinessRuleException("POLICYHOLDER_ALREADY_INACTIVE", "El asegurado ya está dado de baja.");
         }
     }
 
-    private String validatedDocument(PolicyholderRequest request) {
-        String number = normalizeDocument(request.documentNumber());
-        if ((request.personType() == PersonType.NATURAL && request.documentType() != DocumentType.DNI)
-                || (request.personType() == PersonType.LEGAL && request.documentType() != DocumentType.CUIT)) {
-            throw new BusinessRuleException("DOCUMENT_TYPE_MISMATCH", "El tipo de documento no corresponde al tipo de persona.");
+    private void validateDocument(PolicyholderRequest request) {
+        int length = normalizeDocument(request.documentNumber()).length();
+        if (request.personType() == Policyholder.PersonType.INDIVIDUAL && (length < 7 || length > 8)) {
+            throw new BusinessRuleException("INVALID_DNI", "El DNI debe tener 7 u 8 dígitos.");
         }
-        if ((request.documentType() == DocumentType.DNI && (number.length() < 7 || number.length() > 8))
-                || (request.documentType() == DocumentType.CUIT && number.length() != 11)) {
-            throw new BusinessRuleException("INVALID_DOCUMENT_NUMBER", "Ingresá un DNI de 7 u 8 dígitos o un CUIT de 11 dígitos, según corresponda.");
+        if (request.personType() == Policyholder.PersonType.LEGAL_ENTITY && length != 11) {
+            throw new BusinessRuleException("INVALID_CUIT", "El CUIT debe tener 11 dígitos.");
         }
-        return number;
+    }
+
+    private void assertDocumentAvailable(String documentNumber, String exceptId) {
+        String normalized = normalizeDocument(documentNumber);
+        repository.findAll().stream()
+                .filter(holder -> normalizeDocument(holder.getDocumentNumber()).equals(normalized))
+                .filter(holder -> !holder.getId().equals(exceptId))
+                .findFirst().ifPresent(holder -> {
+                    throw new ConflictException("Ya existe un asegurado con ese DNI o CUIT.", "documentNumber");
+                });
+    }
+
+    private void assertPlateAvailable(String plate, String exceptVehicleId) {
+        String normalized = normalizePlate(plate);
+        boolean used = repository.findAll().stream().flatMap(holder -> holder.getVehicles().stream())
+                .anyMatch(vehicle -> normalizePlate(vehicle.plate()).equals(normalized)
+                        && !vehicle.id().equals(exceptVehicleId));
+        if (used) {
+            throw new ConflictException("Ya existe un vehículo con esa patente.", "plate");
+        }
+    }
+
+    private Policyholder.Vehicle toVehicle(String id, VehicleRequest request) {
+        return new Policyholder.Vehicle(id, normalizePlate(request.plate()), request.brand().trim(),
+                request.model().trim(), request.year(), request.engineNumber().trim(), request.chassisNumber().trim());
     }
 
     private static String normalizeDocument(String value) {
         return value.replaceAll("[^0-9]", "");
     }
 
-    private static String validatedPlate(String value) {
-        String plate = value.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", "");
-        if (!plate.matches("[A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2}")) {
-            throw new BusinessRuleException("INVALID_PLATE", "Ingresá una patente válida.");
-        }
-        return plate;
-    }
-
-    private void assertDocumentAvailable(String document, String exceptId) {
-        repository.findByDocumentNumber(document)
-                .filter(existing -> !existing.getId().equals(exceptId))
-                .ifPresent(existing -> {
-                    throw new ConflictException("Ya existe un asegurado con ese DNI o CUIT.", "documentNumber");
-                });
-    }
-
-    private void assertPlateAvailable(String plate, String exceptVehicleId) {
-        repository.findByPlate(plate)
-                .filter(existing -> !existing.getId().equals(exceptVehicleId))
-                .ifPresent(existing -> {
-                    throw new ConflictException("Ya existe un vehículo con esa patente.", "plate");
-                });
+    private static String normalizePlate(String value) {
+        return value.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
     }
 }

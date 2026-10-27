@@ -3,14 +3,12 @@ package com.techforb.app.modules.quotes.domain;
 import java.util.List;
 import java.util.Optional;
 
-/** Puerto para las cotizaciones y las valuaciones disponibles. */
+/** Puerto para cotizaciones y catálogo disponibles en este módulo. */
 public interface QuoteRepository {
 
-    List<VehicleOption> findAllVehicles();
+    List<Vehicle> findAllVehicles();
 
-    Optional<VehicleOption> findVehicle(String brand, String model, String version, int year);
-
-    Optional<Quote> findByNumber(String number);
+    Optional<Quote> findById(String id);
 
     Quote save(Quote quote);
 }
