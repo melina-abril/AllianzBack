@@ -3,8 +3,7 @@ package com.techforb.app.modules.quotes.api;
 import com.techforb.app.modules.quotes.application.QuoteService;
 import com.techforb.app.modules.quotes.application.dto.QuoteRequest;
 import com.techforb.app.modules.quotes.application.dto.QuoteResponse;
-import com.techforb.app.modules.quotes.application.dto.VehicleResponse;
-import com.techforb.app.shared.web.PageResponse;
+import com.techforb.app.modules.quotes.application.dto.VehicleCatalogResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -33,36 +32,30 @@ public class QuoteController {
         this.service = service;
     }
 
-    @GetMapping("/vehicles")
-    @Operation(summary = "Lista las combinaciones de vehículos disponibles para cotizar")
-    public PageResponse<VehicleResponse> listQuotableVehicles(
-            @RequestParam(required = false) String brand,
-            @RequestParam(required = false) String model,
-            @RequestParam(required = false) String version,
-            @RequestParam(required = false) Integer year,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        return service.listQuotableVehicles(brand, model, version, year, page, size);
+    @GetMapping("/vehicle-catalog")
+    @Operation(summary = "Catálogo de vehículos disponibles para cotizar")
+    public VehicleCatalogResponse getVehicleCatalog() {
+        return service.getVehicleCatalog();
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Calcula y guarda una cotización válida por 15 días")
+    @Operation(summary = "Calcula y guarda una cotización por 15 días")
     public QuoteResponse createQuote(@Valid @RequestBody QuoteRequest request) {
         return service.createQuote(request);
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "Actualiza una cotización vigente sin extender su vencimiento")
+    @Operation(summary = "Actualiza una cotización sin extender su vigencia")
     public QuoteResponse updateQuote(@PathVariable String id, @Valid @RequestBody QuoteRequest request) {
         return service.updateQuote(id, request);
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Recupera una cotización vigente por número y DNI")
-    public QuoteResponse retrieveQuote(
+    public QuoteResponse recoverQuote(
             @PathVariable String id,
             @RequestParam @Pattern(regexp = "^[0-9]{7,8}$", message = "El DNI debe tener siete u ocho dígitos.") String dni) {
-        return service.retrieveQuote(id, dni);
+        return service.recoverQuote(id, dni);
     }
 }

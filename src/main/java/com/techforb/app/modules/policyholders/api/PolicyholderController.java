@@ -3,8 +3,7 @@ package com.techforb.app.modules.policyholders.api;
 import com.techforb.app.modules.policyholders.application.PolicyholderService;
 import com.techforb.app.modules.policyholders.application.dto.PolicyholderRequest;
 import com.techforb.app.modules.policyholders.application.dto.PolicyholderResponse;
-import com.techforb.app.modules.policyholders.application.dto.VehicleRequest;
-import com.techforb.app.modules.policyholders.application.dto.VehicleResponse;
+import com.techforb.app.modules.policyholders.application.dto.PolicyholderSummaryResponse;
 import com.techforb.app.shared.web.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -33,50 +32,37 @@ public class PolicyholderController {
     }
 
     @GetMapping
-    @Operation(summary = "Buscar asegurados por nombre o documento")
-    public PageResponse<PolicyholderResponse> listPolicyholders(
-            @RequestParam(required = false) String search,
+    @Operation(summary = "Busca asegurados por nombre o razón social y DNI o CUIT")
+    public PageResponse<PolicyholderSummaryResponse> listPolicyholders(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String documentNumber,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return service.listPolicyholders(search, page, size);
+        return service.listPolicyholders(name, documentNumber, page, size);
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Consultar ficha del asegurado")
+    @Operation(summary = "Ficha del asegurado, sus vehículos, pólizas y siniestros")
     public PolicyholderResponse getPolicyholder(@PathVariable String id) {
         return service.getPolicyholder(id);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Dar de alta un asegurado")
+    @Operation(summary = "Alta de asegurado")
     public PolicyholderResponse createPolicyholder(@Valid @RequestBody PolicyholderRequest request) {
         return service.createPolicyholder(request);
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "Actualizar un asegurado")
+    @Operation(summary = "Edición de asegurado")
     public PolicyholderResponse updatePolicyholder(@PathVariable String id, @Valid @RequestBody PolicyholderRequest request) {
         return service.updatePolicyholder(id, request);
     }
 
-    @PostMapping("/{id}/vehicles")
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Agregar un vehículo al asegurado")
-    public VehicleResponse addVehicle(@PathVariable String id, @Valid @RequestBody VehicleRequest request) {
-        return service.addVehicle(id, request);
-    }
-
-    @PutMapping("/{id}/vehicles/{vehicleId}")
-    @Operation(summary = "Actualizar un vehículo del asegurado")
-    public VehicleResponse updateVehicle(@PathVariable String id, @PathVariable String vehicleId,
-            @Valid @RequestBody VehicleRequest request) {
-        return service.updateVehicle(id, vehicleId, request);
-    }
-
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Dar de baja un asegurado sin pólizas vigentes")
+    @Operation(summary = "Baja de asegurado sin pólizas vigentes")
     public void deactivatePolicyholder(@PathVariable String id) {
         service.deactivatePolicyholder(id);
     }

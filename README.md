@@ -1,12 +1,12 @@
 # Allianz — API de seguros de autos
 
-Backend REST con Java 21 y Spring Boot 4.1. Los datos se mantienen en memoria y las respuestas son de ejemplo; se pierden al reiniciar la aplicación.
+Backend REST desarrollado con Java 21 y Spring Boot 4.1. Los datos se almacenan en memoria y se reinician al volver a levantar la aplicación; las respuestas de ejemplo son provisionales.
 
-## Iniciar
+## Ejecutar
 
-Con Java 21 y Maven instalados, ejecuta:
+Necesitas Java 21 y Maven. Desde la raíz del proyecto:
 
-```sh
+```bash
 mvn spring-boot:run
 ```
 
@@ -18,21 +18,22 @@ La API queda disponible en `http://localhost:8080/api` y la documentación inter
 
 | Método | Endpoint | Descripción |
 | --- | --- | --- |
-| GET | `/api/quotes/vehicles` | Consulta las combinaciones de vehículos disponibles para cotizar. |
-| POST | `/api/quotes` | Crea una cotización con cuatro coberturas y vigencia de 15 días. |
-| PUT | `/api/quotes/{id}` | Recalcula una cotización vigente. |
-| GET | `/api/quotes/{id}` | Recupera una cotización vigente; requiere el DNI como parámetro de consulta. |
+| GET | `/api/quotes/vehicle-catalog` | Consultar marcas, modelos, versiones y años disponibles. |
+| POST | `/api/quotes` | Crear una cotización con cuatro coberturas. |
+| PUT | `/api/quotes/{id}` | Actualizar una cotización vigente. |
+| GET | `/api/quotes/{id}` | Recuperar una cotización vigente; requiere el DNI como parámetro de consulta. |
 
 ### Asegurados y vehículos (`policyholders`)
 
 | Método | Endpoint | Descripción |
 | --- | --- | --- |
-| GET | `/api/policyholders` | Busca asegurados con paginación. |
-| GET | `/api/policyholders/{id}` | Consulta la ficha de un asegurado. |
-| POST | `/api/policyholders` | Da de alta un asegurado. |
-| PUT | `/api/policyholders/{id}` | Actualiza un asegurado. |
-| POST | `/api/policyholders/{id}/vehicles` | Asocia un vehículo. |
-| PUT | `/api/policyholders/{id}/vehicles/{vehicleId}` | Actualiza un vehículo asociado. |
-| DELETE | `/api/policyholders/{id}` | Da de baja un asegurado sin pólizas vigentes. |
+| GET | `/api/policyholders` | Listar asegurados con paginación y filtros opcionales. |
+| GET | `/api/policyholders/{id}` | Consultar la ficha de un asegurado. |
+| POST | `/api/policyholders` | Registrar un asegurado. |
+| PUT | `/api/policyholders/{id}` | Actualizar un asegurado. |
+| DELETE | `/api/policyholders/{id}` | Dar de baja a un asegurado sin pólizas vigentes. |
+| POST | `/api/vehicles` | Registrar un vehículo. |
+| GET | `/api/vehicles/{id}` | Consultar un vehículo. |
+| PUT | `/api/vehicles/{id}` | Actualizar un vehículo. |
 
-Spring Boot detecta automáticamente los controladores de ambos módulos bajo `com.techforb.app.modules`; no hace falta registrar rutas adicionales. Los errores se devuelven como `ProblemDetail` y los listados paginados incluyen `items`, `page`, `size`, `totalItems` y `totalPages`.
+Los listados aceptan `page` y `size` como parámetros de consulta; por defecto, la convención es `page=0&size=10`. Los controladores de ambos módulos se registran automáticamente mediante el escaneo de componentes de Spring Boot.

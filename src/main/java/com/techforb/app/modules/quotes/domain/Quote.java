@@ -6,87 +6,122 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Period;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
-/** Cotización guardada; recalcular no modifica el número, la creación ni el vencimiento. */
+/** Cotización en memoria: calcula cuatro premios y mantiene inalterable el vencimiento original. */
 public class Quote {
 
-    private final String id;
-    private final Instant createdAt;
-    private final LocalDate expiresOn;
-    private QuoteInput input;
-    private BigDecimal insuredAmount;
-    private List<Coverage> coverages;
-    private List<DiscountType> discounts;
-    private Instant updatedAt;
-
-    public Quote(String id, QuoteInput input, Instant createdAt, LocalDate expiresOn, LocalDate pricingDate) {
-        this.id = Objects.requireNonNull(id);
-        this.createdAt = Objects.requireNonNull(createdAt);
-        this.expiresOn = Objects.requireNonNull(expiresOn);
-        recalculate(input, createdAt, pricingDate);
+    public enum CoverageType {
+        CIVIL_LIABILITY,
+        COMPREHENSIVE_THIRD_PARTY,
+        COMPREHENSIVE_THIRD_PARTY_WITH_HAIL,
+        ALL_RISK_WITH_DEDUCTIBLE
     }
 
-    public void recalculate(QuoteInput newInput, Instant updatedAt, LocalDate pricingDate) {
-        Objects.requireNonNull(newInput);
-        List<DiscountType> newDiscounts = new ArrayList<>();
-        if (newInput.claimsLastThreeYears() == 0) {
-            newDiscounts.add(DiscountType.NO_CLAIMS);
+    public enum DiscountType {
+        CLAIM_FREE,
+        AUTOMATIC_DEBIT
+    }
+
+    public enum Status {
+        SAVED
+    }
+
+    public record Coverage(CoverageType type, BigDecimal monthlyPremium) {
+    }
+
+    public record Discount(DiscountType type, BigDecimal rate) {
+    }
+
+    private final String id;
+    private final QuoteData data;
+    private final BigDecimal insuredValue;
+    private final List<Coverage> coverages;
+    private final List<Discount> discounts;
+    private final Instant createdAt;
+    private final Instant updatedAt;
+    private final LocalDate expiresOn;
+
+    public Quote(String id, QuoteData data, VehicleOption vehicle, Instant createdAt, LocalDate createdOn) {
+        this(id, data, vehicle, createdAt, createdAt, createdOn.plusDays(15));
+    }
+
+    private Quote(String id, QuoteData data, VehicleOption vehicle, Instant createdAt, Instant updatedAt, LocalDate expiresOn) {
+        this.id = Objects.requireNonNull(id);
+        this.data = Objects.requireNonNull(data);
+        this.insuredValue = vehicle.insuredValue();
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+        this.expiresOn = expiresOn;
+
+        List<Discount> applied = new ArrayList<>();
+        if (data.claimsLastThreeYears() == 0) {
+            applied.add(new Discount(DiscountType.CLAIM_FREE, new BigDecimal("0.10")));
         }
-        if (newInput.paymentMethod() == PaymentMethod.AUTOMATIC_DEBIT) {
-            newDiscounts.add(DiscountType.AUTOMATIC_DEBIT);
+        if (data.paymentMethod() == PaymentMethod.AUTOMATIC_DEBIT) {
+            applied.add(new Discount(DiscountType.AUTOMATIC_DEBIT, new BigDecimal("0.05")));
         }
-        BigDecimal discountRate = newDiscounts.stream().map(DiscountType::getRate)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        this.discounts = List.copyOf(applied);
+        BigDecimal totalDiscount = discounts.stream().map(Discount::rate).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal riskFactor = BigDecimal.ONE;
-        if (newInput.use() == VehicleUse.COMMERCIAL) {
-            riskFactor = riskFactor.add(new BigDecimal("0.30"));
+        if (data.vehicleUse() == VehicleUse.COMMERCIAL) {
+            riskFactor = riskFactor.multiply(new BigDecimal("1.25"));
         }
-        if (newInput.gnc()) {
-            riskFactor = riskFactor.add(new BigDecimal("0.12"));
+        if (data.hasCng()) {
+            riskFactor = riskFactor.multiply(new BigDecimal("1.12"));
         }
-        riskFactor = riskFactor.add(new BigDecimal("0.15")
-                .multiply(BigDecimal.valueOf(newInput.claimsLastThreeYears())));
-        if (Period.between(newInput.birthDate(), pricingDate).getYears() < 25) {
-            riskFactor = riskFactor.add(new BigDecimal("0.20"));
+        if (Period.between(data.birthDate(), expiresOn.minusDays(15)).getYears() < 25) {
+            riskFactor = riskFactor.multiply(new BigDecimal("1.20"));
         }
-        if (pricingDate.getYear() - newInput.vehicle().year() > 10) {
-            riskFactor = riskFactor.add(new BigDecimal("0.10"));
+        if (data.yearsLicensed() < 2) {
+            riskFactor = riskFactor.multiply(new BigDecimal("1.10"));
         }
-        BigDecimal finalRiskFactor = riskFactor;
-        BigDecimal payableRate = BigDecimal.ONE.subtract(discountRate);
-        List<Coverage> newCoverages = Arrays.stream(CoverageType.values())
-                .map(type -> new Coverage(type, newInput.vehicle().insuredValue()
-                        .multiply(type.getMonthlyFactor()).multiply(finalRiskFactor).multiply(payableRate)
-                        .setScale(2, RoundingMode.HALF_EVEN)))
-                .toList();
-        this.input = newInput;
-        this.insuredAmount = newInput.vehicle().insuredValue();
-        this.discounts = List.copyOf(newDiscounts);
-        this.coverages = newCoverages;
-        this.updatedAt = Objects.requireNonNull(updatedAt);
+        riskFactor = riskFactor.multiply(BigDecimal.ONE.add(new BigDecimal("0.12")
+                .multiply(BigDecimal.valueOf(data.claimsLastThreeYears()))));
+        this.coverages = List.of(
+                coverage(CoverageType.CIVIL_LIABILITY, "0.0030", riskFactor, totalDiscount),
+                coverage(CoverageType.COMPREHENSIVE_THIRD_PARTY, "0.0050", riskFactor, totalDiscount),
+                coverage(CoverageType.COMPREHENSIVE_THIRD_PARTY_WITH_HAIL, "0.0065", riskFactor, totalDiscount),
+                coverage(CoverageType.ALL_RISK_WITH_DEDUCTIBLE, "0.0110", riskFactor, totalDiscount));
+    }
+
+    private Coverage coverage(CoverageType type, String monthlyRate, BigDecimal riskFactor, BigDecimal discount) {
+        BigDecimal premium = insuredValue.multiply(new BigDecimal(monthlyRate)).multiply(riskFactor)
+                .multiply(BigDecimal.ONE.subtract(discount)).setScale(2, RoundingMode.HALF_EVEN);
+        return new Coverage(type, premium);
+    }
+
+    public Quote recalculate(QuoteData newData, VehicleOption vehicle, Instant now) {
+        return new Quote(id, newData, vehicle, createdAt, now, expiresOn);
+    }
+
+    public boolean isExpired(LocalDate today) {
+        return today.isAfter(expiresOn);
     }
 
     public String getId() {
         return id;
     }
 
-    public QuoteInput getInput() {
-        return input;
+    public QuoteData getData() {
+        return data;
     }
 
-    public BigDecimal getInsuredAmount() {
-        return insuredAmount;
+    public BigDecimal getInsuredValue() {
+        return insuredValue;
     }
 
     public List<Coverage> getCoverages() {
         return coverages;
     }
 
-    public List<DiscountType> getDiscounts() {
+    public List<Discount> getDiscounts() {
         return discounts;
+    }
+
+    public Status getStatus() {
+        return Status.SAVED;
     }
 
     public Instant getCreatedAt() {
